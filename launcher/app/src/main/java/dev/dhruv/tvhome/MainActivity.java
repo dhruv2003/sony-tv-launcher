@@ -72,6 +72,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private static final long MINUTE_MS = 60_000L;
     private static final long PANEL_MS = 220L;
     private static final String KEY_SOUNDS = "sounds";
+    private static final String KEY_SHOW_SHELF = "show_shelf";     // the top row (dock) and the app grid
+    private static final String KEY_SHOW_WATCH = "show_watch";     // Continue Watching
     private static final String SONY_AUDIO_OUTPUT = "com.sony.dtv.audiooutput";
     private static final String SONY_TIMERS = "com.sony.dtv.timers";
     private static final int GRANT_FLAGS = Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -102,6 +104,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private TextView greeting;
     private TextView btnWifi;
     private View lastPill;
+    private DockDecoration dockDecoration;
     private View watchBlock;
     private HorizontalScrollView watchScroll;
     private LinearLayout watchRow;
@@ -193,22 +196,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.setLayoutManager(new GridLayoutManager(this, COLUMNS));
         grid.setHasFixedSize(true);
         grid.setItemAnimator(null);
-        grid.addItemDecoration(new DockDecoration(COLUMNS, density));
+        dockDecoration = new DockDecoration(COLUMNS, density);
+        grid.addItemDecoration(dockDecoration);
         grid.setLayoutAnimation(new LayoutAnimationController(
                 AnimationUtils.loadAnimation(this, R.anim.tile_enter), 0.06f));
         adapter = new AppAdapter(this, this, COLUMNS, prefs);
         grid.setAdapter(adapter);
+        applyDock(shelfShown());
 
         // tvOS layout: push the dock row to the bottom of the screen; the grid hides below until you press Down.
-        grid.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            int h = b - t;
-            int dockRow = (int) ((145 + 6 + 12) * density);   // item height plus DockDecoration offsets
-            int want = Math.max(0, h - dockRow - (int) (30 * density));
-            if (grid.getPaddingTop() != want) {
-                grid.setPadding(grid.getPaddingLeft(), want, grid.getPaddingRight(), grid.getPaddingBottom());
-            }
-            layoutOverlays();
-        });
+        grid.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> parkDock(b - t));
         watchBlock.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> layoutOverlays());
         heroBlock.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> layoutOverlays());
 
@@ -387,7 +384,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         glassOnWatch = false;
         moveGlass(card);
         View item = (View) card.getParent();
-        if (position < COLUMNS) {
+        if (position < COLUMNS && shelfShown()) {
             lastDock = position;
             // Dock: park it at the bottom of the screen and show the top shelf for this app.
             int decoratedTop = item.getTop() - (int) (6 * density);
@@ -575,19 +572,62 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         return cs != null ? cs.newDrawable(getResources()).mutate() : d;
     }
 
-    /** A tiny render of the art: scaled up full screen (plus RenderEffect blur on S+) it reads as a blur. */
+    /**
+     * A small render of the art, blurred in software so it also looks smooth below Android 12
+     * (where RenderEffect is unavailable). Scaled up full screen it reads as a soft blur.
+     */
     private Bitmap tinyBitmap(Drawable art, boolean iconArt, int color) {
-        int w = 48, h = 27;
+        int w = 128, h = 72;
         Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         c.drawColor(iconArt || art == null ? darken(color) : Color.BLACK);
         if (art != null) {
             Drawable d = copyOf(art);
-            if (iconArt) d.setBounds(w / 2 - 7, h / 2 - 7, w / 2 + 7, h / 2 + 7);
+            int half = w * 7 / 48;
+            if (iconArt) d.setBounds(w / 2 - half, h / 2 - half, w / 2 + half, h / 2 + half);
             else d.setBounds(0, 0, w, h);
             d.draw(c);
         }
+        boxBlur(bmp, 5, 3);
         return bmp;
+    }
+
+    /** In-place box blur (edge-clamped), repeated {@code passes} times to approximate a Gaussian. */
+    private static void boxBlur(Bitmap bmp, int radius, int passes) {
+        int w = bmp.getWidth(), h = bmp.getHeight();
+        int[] px = new int[w * h];
+        int[] tmp = new int[w * h];
+        bmp.getPixels(px, 0, w, 0, 0, w, h);
+        for (int i = 0; i < passes; i++) {
+            blurPass(px, tmp, w, h, radius, true);
+            blurPass(tmp, px, w, h, radius, false);
+        }
+        bmp.setPixels(px, 0, w, 0, 0, w, h);
+    }
+
+    private static void blurPass(int[] src, int[] dst, int w, int h, int r, boolean horizontal) {
+        int lines = horizontal ? h : w;
+        int len = horizontal ? w : h;
+        int step = horizontal ? 1 : w;
+        int lineStep = horizontal ? w : 1;
+        int div = 2 * r + 1;
+        for (int l = 0; l < lines; l++) {
+            int base = l * lineStep;
+            int a = 0, rr = 0, g = 0, b = 0;
+            for (int k = -r; k <= r; k++) {
+                int p = src[base + Math.min(len - 1, Math.max(0, k)) * step];
+                a += p >>> 24; rr += (p >> 16) & 0xFF; g += (p >> 8) & 0xFF; b += p & 0xFF;
+            }
+            for (int i = 0; i < len; i++) {
+                dst[base + i * step] = ((a / div) << 24) | ((rr / div) << 16) | ((g / div) << 8) | (b / div);
+                int add = src[base + Math.min(len - 1, i + r + 1) * step];
+                int sub = src[base + Math.max(0, i - r) * step];
+                a += (add >>> 24) - (sub >>> 24);
+                rr += ((add >> 16) & 0xFF) - ((sub >> 16) & 0xFF);
+                g += ((add >> 8) & 0xFF) - ((sub >> 8) & 0xFF);
+                b += (add & 0xFF) - (sub & 0xFF);
+            }
+        }
     }
 
     private static int darken(int color) {
@@ -624,7 +664,55 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
     }
 
+    private boolean shelfShown() {
+        return prefs.getBoolean(KEY_SHOW_SHELF, true);
+    }
+
+    /** Continue Watching sits above the top row, so hiding the top row hides it too. */
+    private boolean watchAllowed() {
+        return shelfShown() && prefs.getBoolean(KEY_SHOW_WATCH, true);
+    }
+
+    /** Pads the grid so the dock row is parked at the bottom of the screen; the rest hides below it. */
+    private void parkDock(int gridHeight) {
+        int dockRow = (int) ((145 + 6 + 12) * density);   // item height plus DockDecoration offsets
+        // Dock on: park the dock row at the bottom. Dock off: the grid starts right under the top bar.
+        int want = shelfShown() ? Math.max(0, gridHeight - dockRow - (int) (30 * density)) : (int) (10 * density);
+        if (grid.getPaddingTop() != want) {
+            grid.setPadding(grid.getPaddingLeft(), want, grid.getPaddingRight(), grid.getPaddingBottom());
+        }
+        layoutOverlays();
+    }
+
+    private void applyDock(boolean on) {
+        dockDecoration.setDockSize(on ? COLUMNS : 0);
+        adapter.setDockEnabled(on);
+    }
+
+    /**
+     * Applies the quick-settings switches. Top row off removes the dock band and the shelf above it
+     * (including Continue Watching) but keeps every app: they become one grid, most recently opened first.
+     */
+    private void applyShelfPrefs() {
+        boolean dock = shelfShown();
+        applyDock(dock);
+        if (moving) exitMoveMode();
+        dismissPopup();
+        resetHighlight();
+        lastFocused = 0;
+        lastDock = 0;
+        parkDock(grid.getHeight());
+        adapter.reload();
+        grid.invalidateItemDecorations();
+        grid.post(() -> grid.scrollToPosition(0));
+        if (!watchAllowed()) watchBlock.setVisibility(View.GONE);
+        layoutOverlays();
+        watchSignature = null;      // force a re-render so the row comes back when switched on
+        refreshWatchNext();
+    }
+
     private void renderWatchNext(List<WatchNext.Item> items) {
+        if (!watchAllowed()) items = Collections.emptyList();
         StringBuilder sig = new StringBuilder();
         for (WatchNext.Item it : items) {
             sig.append(it.id).append(':').append(it.title).append(':').append(it.subtitle).append(':')
@@ -802,6 +890,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
         try {
             startActivity(i);
+            adapter.noteLaunched(e.key);
         } catch (Exception ex) {
             Toast.makeText(this, getString(R.string.cannot_open, e.label), Toast.LENGTH_SHORT).show();
         }
@@ -1160,6 +1249,35 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     soundStatus[0].setText(soundsLabel());
                     sounds.select();
                 });
+        final TextView[] status = new TextView[2];
+        final TextView[] bothTitle = new TextView[1];
+        final Runnable refresh = () -> {
+            boolean shelf = shelfShown();
+            status[0].setText(getString(watchAllowed() ? R.string.qs_on : R.string.qs_off));
+            status[1].setText(getString(shelf ? R.string.qs_on : R.string.qs_off));
+            bothTitle[0].setText(shelf ? R.string.qs_hide_both : R.string.qs_show_both);
+        };
+        status[0] = addRow(qsItems, null, R.drawable.ic_av, getString(R.string.continue_watching), "", false, () -> {
+            prefs.edit().putBoolean(KEY_SHOW_WATCH, !prefs.getBoolean(KEY_SHOW_WATCH, true)).apply();
+            applyShelfPrefs();
+            sounds.select();
+            refresh.run();
+        });
+        status[1] = addRow(qsItems, null, R.drawable.ic_star, getString(R.string.qs_shelf), "", false, () -> {
+            prefs.edit().putBoolean(KEY_SHOW_SHELF, !shelfShown()).apply();
+            applyShelfPrefs();
+            sounds.select();
+            refresh.run();
+        });
+        addRow(qsItems, null, R.drawable.ic_home, getString(R.string.qs_hide_both), null, false, () -> {
+            boolean show = !shelfShown();
+            prefs.edit().putBoolean(KEY_SHOW_SHELF, show).putBoolean(KEY_SHOW_WATCH, show).apply();
+            applyShelfPrefs();
+            sounds.select();
+            refresh.run();
+        });
+        bothTitle[0] = qsItems.getChildAt(qsItems.getChildCount() - 1).findViewById(R.id.title);
+        refresh.run();
         addRow(qsItems, null, R.drawable.ic_refresh, getString(R.string.qs_reset), null, false, () -> {
             if (moving) exitMoveMode();
             adapter.resetFavourites();

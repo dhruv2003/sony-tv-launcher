@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PATH="$ROOT/platform-tools:$PATH"   # adb downloaded by install.sh, if any
 STATE="$ROOT/state"            # git-ignored: this TV's address and everything we changed on it
 mkdir -p "$STATE"
 
@@ -14,7 +15,7 @@ die() { echo "error: $*" >&2; exit 1; }
 
 need_adb() {
   command -v adb >/dev/null 2>&1 && return
-  die "adb not found. Install it: 'brew install --cask android-platform-tools' (macOS) or 'sudo apt install adb' (Debian/Ubuntu)."
+  die "adb not found. Run install.sh, or install it: 'brew install --cask android-platform-tools' (macOS) or 'sudo apt install adb' (Debian/Ubuntu)."
 }
 
 # TV=<ip>[:port] in the environment wins, else state/tv (written by connect.sh).

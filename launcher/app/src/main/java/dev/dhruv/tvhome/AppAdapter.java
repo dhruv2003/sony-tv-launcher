@@ -27,6 +27,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -71,11 +72,15 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
 
     static final float FOCUS_SCALE = 1.10f;
     private static final String KEY_FAVOURITES = "favourites";
+    private static final String KEY_LAST_OPENED = "last_opened";   // "component=millis" lines
 
     private final Context ctx;
     private final TileListener listener;
-    private final int dockSize;
+    private final int configuredDock;
+    private boolean dockOn = true;
     private final SharedPreferences prefs;
+    /** Favourites in dock order, as of the last reload or save (also kept while the dock is hidden). */
+    private List<String> favouriteOrder = new ArrayList<>();
     /** Loaded entries by component, so returning home doesn't reload every banner. */
     private final Map<String, Entry> cache = new HashMap<>();
     private final List<Entry> items = new ArrayList<>();
@@ -85,8 +90,19 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     AppAdapter(Context ctx, TileListener listener, int dockSize, SharedPreferences prefs) {
         this.ctx = ctx;
         this.listener = listener;
-        this.dockSize = dockSize;
+        this.configuredDock = dockSize;
         this.prefs = prefs;
+    }
+
+    private int dockSize() {
+        return dockOn ? configuredDock : 0;
+    }
+
+    /** Shows or hides the dock. When hidden, all apps are one grid ordered by last opened. */
+    void setDockEnabled(boolean on) {
+        if (dockOn == on) return;
+        dockOn = on;
+        signature = "";
     }
 
     /** Drop cached banners and labels, e.g. after an app was updated. */
@@ -110,7 +126,9 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         }
         List<String> keys = new ArrayList<>(byKey.keySet());
         Collections.sort(keys);
-        String sig = TextUtils.join(",", keys) + "|" + prefs.getString(KEY_FAVOURITES, "");
+        // The favourites must stay last: commitFavourites() rewrites everything after the final '|'.
+        String sig = TextUtils.join(",", keys) + "|" + dockOn + "|" + prefs.getString(KEY_LAST_OPENED, "")
+                + "|" + prefs.getString(KEY_FAVOURITES, "");
         if (sig.equals(signature)) return false;
         signature = sig;
 
@@ -129,12 +147,19 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         }
         cache.keySet().retainAll(byKey.keySet());
 
-        List<String> favs = favouriteKeys(all);
+        favouriteOrder = favouriteKeys(all);
+        List<String> favs = dockOn ? favouriteOrder : new ArrayList<String>();
+        // Most recently opened first; apps never opened from here follow alphabetically.
+        final Map<String, Long> opened = lastOpened();
+        Comparator<Entry> byRecent = (a, b) -> {
+            int c = Long.compare(openedAt(opened, b.key), openedAt(opened, a.key));
+            return c != 0 ? c : a.label.compareToIgnoreCase(b.label);
+        };
         List<Entry> fresh = new ArrayList<>();
         for (String k : favs) fresh.add(cache.get(k));
         List<Entry> rest = new ArrayList<>();
         for (Entry e : all) if (!favs.contains(e.key)) rest.add(e);
-        Collections.sort(rest, (a, b) -> a.label.compareToIgnoreCase(b.label));
+        Collections.sort(rest, byRecent);
         fresh.addAll(rest);
 
         items.clear();
@@ -165,6 +190,24 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         return new ArrayList<>(out);
     }
 
+    private Map<String, Long> lastOpened() {
+        Map<String, Long> out = new HashMap<>();
+        for (String line : prefs.getString(KEY_LAST_OPENED, "").split("\n")) {
+            int eq = line.lastIndexOf('=');
+            if (eq <= 0) continue;
+            try {
+                out.put(line.substring(0, eq), Long.parseLong(line.substring(eq + 1)));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return out;
+    }
+
+    private static long openedAt(Map<String, Long> opened, String key) {
+        Long t = opened.get(key);
+        return t == null ? 0L : t;
+    }
+
     int favouriteCount() {
         return favouriteCount;
     }
@@ -185,6 +228,27 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         favs.remove(items.get(position).key);
         saveFavourites(favs);
         reload();
+    }
+
+    /**
+     * Records that an app was opened: stamps its last-opened time (which orders the grid) and moves it to
+     * the front of the favourites, keeping only the latest {@code configuredDock} for the dock. Saved only;
+     * the list is rebuilt on the next reload (when Home resumes).
+     */
+    void noteLaunched(String key) {
+        Map<String, Long> opened = lastOpened();
+        opened.put(key, System.currentTimeMillis());
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, Long> e : opened.entrySet()) {
+            sb.append(e.getKey()).append('=').append(e.getValue()).append('\n');
+        }
+        prefs.edit().putString(KEY_LAST_OPENED, sb.toString()).apply();
+
+        List<String> favs = dockOn ? currentFavourites() : new ArrayList<>(favouriteOrder);
+        favs.remove(key);
+        favs.add(0, key);
+        while (favs.size() > configuredDock) favs.remove(favs.size() - 1);
+        saveFavourites(favs);
     }
 
     void resetFavourites() {
@@ -217,6 +281,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     }
 
     private void saveFavourites(List<String> keys) {
+        favouriteOrder = new ArrayList<>(keys);
         prefs.edit().putString(KEY_FAVOURITES, TextUtils.join("\n", keys)).apply();
     }
 
@@ -232,7 +297,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         Entry e = items.get(position);
         boolean focused = h.card.isFocused();   // a rebind during move mode keeps the lifted look
         h.name.setText(e.label);
-        h.name.setVisibility(position < dockSize ? View.INVISIBLE : View.VISIBLE);   // the dock has no labels
+        h.name.setVisibility(position < dockSize() ? View.INVISIBLE : View.VISIBLE);   // the dock has no labels
         h.name.setAlpha(focused ? 1f : 0f);
         h.card.setScaleX(focused ? FOCUS_SCALE : 1f);
         h.card.setScaleY(focused ? FOCUS_SCALE : 1f);

@@ -7,3 +7,6 @@ local.properties
 
 # per-TV state written by scripts/ (address, what was disabled, screenshots)
 state/
+
+# adb downloaded by install.sh
+platform-tools/
