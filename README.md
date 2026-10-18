@@ -78,6 +78,11 @@ Source and build notes: [`launcher/`](launcher/README.md).
 
 The UI is based on [tv-vibehack](https://github.com/Gathin23/tv-vibehack) by Gathin (MIT).
 
+## Contributors
+
+- [@dhruv2003](https://github.com/dhruv2003): the kit, scripts and launcher
+- [@Beetroot16](https://github.com/Beetroot16) (Vishrut Deshmukh): one-line installer and guided setup, smooth blur on Android 11, top-row/Continue Watching switches, README screenshots ([#2](https://github.com/dhruv2003/sony-tv-launcher/pull/2))
+
 ## Contributing
 
 Got it working on another brand? Add a `lists/<brand>-<platform>.txt` in the same commented
