@@ -133,7 +133,7 @@ fi
 # ---- 5. home screen ----------------------------------------------------------------------------
 step "5/5  Home screen"
 echo "Disabling packages does not remove ads from the stock home screen itself. The custom launcher"
-echo "(dark, Apple TV style, no ads, shows your recent apps) replaces it, and you can switch back any time."
+echo "(dark, Apple TV style, no ads) replaces it, and you can switch back any time."
 if yes_no "Install the custom launcher and make it your Home screen?" y; then
   "$HERE/install-launcher.sh" </dev/null
   "$HERE/tv-home.sh" custom </dev/null

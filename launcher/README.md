@@ -9,8 +9,8 @@ by the D-pad remote. Built and tested on a Sony Bravia KD-55X80K (Google TV, And
 - **Continue watching** row (from the system Watch Next list; hidden if empty or not readable).
 - **Top row**: large rounded tiles using each app's TV banner (icon on a colour card if the app
   has none). The focused tile scales to 1.1x with a soft glow and shows its name underneath.
-  It follows what you use: opening an app moves it to the front and the row keeps the latest four.
-  Until then it starts from the defaults (`res/values/config.xml`): ZEE5, YouTube, Prime Video, JioHotstar, Sony LIV, Apple TV,
+  Pinned by default; with **Top row follows recent apps** on (quick settings), opening an app moves
+  it to the front and the row keeps the latest four. Defaults (`res/values/config.xml`): ZEE5, YouTube, Prime Video, JioHotstar, Sony LIV, Apple TV,
   Crunchyroll, MUBI, MX Player (installed ones only), then **Inputs** (`com.sony.dtv.tvx`, if present) and
   **Settings** (opens the quick settings panel).
 - **All apps**: every other leanback app, most recently opened first (apps never opened from the
@@ -19,7 +19,7 @@ by the D-pad remote. Built and tested on a Sony Bravia KD-55X80K (Google TV, And
   The order is saved in SharedPreferences.
 - **Quick settings panel**: press **MENU** on the remote or select the gear tile. Wi‑Fi,
   Bluetooth, Sound output, Picture, Sleep timer, Inputs, All settings (each hidden if the TV
-  doesn't provide it), plus launcher options: focus sounds on/off, **Continue watching** on/off,
+  doesn't provide it), plus launcher options: focus sounds on/off, **Top row follows recent apps** (off by default), **Continue watching** on/off,
   **Top row** on/off, **Hide both / Show both** and reset top row. Turning the top row off removes the
   dock band, the shelf above it and Continue Watching; all apps stay as one grid. Back closes it.
 - **Focus sounds**: a quiet tick on focus moves and a click on OK (toggle in the panel).

@@ -73,6 +73,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     static final float FOCUS_SCALE = 1.10f;
     private static final String KEY_FAVOURITES = "favourites";
     private static final String KEY_LAST_OPENED = "last_opened";   // "component=millis" lines
+    static final String KEY_RECENT_DOCK = "recent_dock";           // top row follows recent launches
 
     private final Context ctx;
     private final TileListener listener;
@@ -231,9 +232,10 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     }
 
     /**
-     * Records that an app was opened: stamps its last-opened time (which orders the grid) and moves it to
-     * the front of the favourites, keeping only the latest {@code configuredDock} for the dock. Saved only;
-     * the list is rebuilt on the next reload (when Home resumes).
+     * Records that an app was opened: stamps its last-opened time (which orders the grid) and, when the
+     * "recent apps" top row is switched on ({@link #KEY_RECENT_DOCK}, off by default so pinned favourites
+     * stay put), moves it to the front of the favourites, keeping only the latest {@code configuredDock}.
+     * Saved only; the list is rebuilt on the next reload (when Home resumes).
      */
     void noteLaunched(String key) {
         Map<String, Long> opened = lastOpened();
@@ -243,6 +245,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             sb.append(e.getKey()).append('=').append(e.getValue()).append('\n');
         }
         prefs.edit().putString(KEY_LAST_OPENED, sb.toString()).apply();
+        if (!prefs.getBoolean(KEY_RECENT_DOCK, false)) return;
 
         List<String> favs = dockOn ? currentFavourites() : new ArrayList<>(favouriteOrder);
         favs.remove(key);

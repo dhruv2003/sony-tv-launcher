@@ -1249,6 +1249,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     soundStatus[0].setText(soundsLabel());
                     sounds.select();
                 });
+        final TextView[] recentStatus = new TextView[1];
+        recentStatus[0] = addRow(qsItems, null, R.drawable.ic_refresh, getString(R.string.qs_recent_dock),
+                recentDockLabel(), false, () -> {
+                    boolean on = !prefs.getBoolean(AppAdapter.KEY_RECENT_DOCK, false);
+                    prefs.edit().putBoolean(AppAdapter.KEY_RECENT_DOCK, on).apply();
+                    recentStatus[0].setText(recentDockLabel());
+                    sounds.select();
+                });
         final TextView[] status = new TextView[2];
         final TextView[] bothTitle = new TextView[1];
         final Runnable refresh = () -> {
@@ -1292,6 +1300,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             closeQuickSettings(false);
             open(intent);
         });
+    }
+
+    private String recentDockLabel() {
+        return getString(prefs.getBoolean(AppAdapter.KEY_RECENT_DOCK, false) ? R.string.qs_on : R.string.qs_off);
     }
 
     private String soundsLabel() {

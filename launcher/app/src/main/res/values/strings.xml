@@ -38,6 +38,7 @@
     <string name="qs_on">On</string>
     <string name="qs_off">Off</string>
     <string name="qs_shelf">Top row</string>
+    <string name="qs_recent_dock">Top row follows recent apps</string>
     <string name="qs_hide_both">Hide both</string>
     <string name="qs_show_both">Show both</string>
     <string name="qs_reset">Reset favourites</string>

@@ -8,7 +8,7 @@ Wi‑Fi ADB from your computer: no root, nothing uninstalled, and one command un
 
 | Before | After |
 | --- | --- |
-| ![Stock Google home screen with a sponsored banner and a sponsored row](docs/before.png) | ![The launcher: clock, your recent apps in a dock, the focused app large above it](docs/after.png) |
+| ![Stock Google home screen with a sponsored banner and a sponsored row](docs/before.png) | ![The launcher: clock, your apps in a dock, the focused app large above it](docs/after.png) |
 
 | All apps, most recently opened first | Quick settings: hide the shelves |
 | --- | --- |
